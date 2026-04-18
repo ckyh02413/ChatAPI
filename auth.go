@@ -48,32 +48,31 @@ func GenerateJWT(username string) (string, error) {
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var user User
-	json.NewDecoder(r.Body).Decode(&user)
+	var input User
+	json.NewDecoder(r.Body).Decode(&input)
 
-	if user.Username == "" || user.Mail == "" || user.Password == "" {
+	if input.Username == "" || input.Mail == "" || input.Password == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)
 		return
 	}
 
-	hashedPassword, err := HashPassword(user.Password)
+	hashedPassword, err := HashPassword(input.Password)
 	if err != nil {
 		http.Error(w, "Error hashing password", http.StatusInternalServerError)
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	_, err = db.Exec(
+		"INSERT INTO USERS (username, mail, password) VALUES ($1, $2, $3)",
+		input.Username, input.Mail, hashedPassword,
+	)
 
-	if _, exists := users[user.Username]; exists {
+	if err != nil {
 		http.Error(w, "User already exists", http.StatusConflict)
 		return
 	}
 
-	user.Password = hashedPassword
-	users[user.Username] = user
-
-	token, err := GenerateJWT(user.Username)
+	token, err := GenerateJWT(input.Username)
 	if err != nil {
 		http.Error(w, "Error generating token", http.StatusInternalServerError)
 		return
@@ -90,15 +89,19 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	var input User
 	json.NewDecoder(r.Body).Decode(&input)
 
-	mu.Lock()
-	user, exists := users[input.Username]
-	mu.Unlock()
+	var user User
 
-	if !exists {
+	err := db.QueryRow(
+		"SELECT username, password FROM users WHERE username = $1",
+		input.Username,
+	).Scan(&user.Username, &user.Password)
+
+	if err != nil {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	err := CheckPassword(user.Password, input.Password)
+
+	err = CheckPassword(user.Password, input.Password)
 	if err != nil {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
@@ -136,11 +139,14 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		mu.Lock()
-		_, exists := users[claims.Username]
-		mu.Unlock()
+		var exists bool
 
-		if !exists {
+		err = db.QueryRow(
+			"SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+			claims.Username,
+		).Scan(&exists)
+
+		if err != nil || !exists {
 			http.Error(w, "User no longer exists", http.StatusUnauthorized)
 			return
 		}

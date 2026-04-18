@@ -21,9 +21,14 @@ type ChatroomSummary struct {
 }
 
 func getChatroom(w http.ResponseWriter, id int) (Chatroom, bool) {
-	chatroom, exists := chatrooms[id]
+	var chatroom Chatroom
 
-	if !exists {
+	err := db.QueryRow(
+		"SELECT id, name, creator FROM chatrooms WHERE id = $1",
+		id,
+	).Scan(&chatroom.ID, &chatroom.Name, &chatroom.Creator)
+
+	if err != nil {
 		http.Error(w, "Room not found", http.StatusNotFound)
 		return Chatroom{}, false
 	}
@@ -44,24 +49,33 @@ func CreateChatroomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	var exists bool
 
-	for _, cr := range chatrooms {
-		if cr.Name == input.Name {
-			http.Error(w, "Chatroom already exists", http.StatusConflict)
-			return
-		}
+	err := db.QueryRow(
+		"SELECT EXISTS (SELECT 1 FROM chatrooms WHERE name = $1)",
+		input.Name,
+	).Scan(&exists)
+
+	if err != nil || exists {
+		http.Error(w, "Chatroom already exists", http.StatusConflict)
+		return
 	}
-	input.Creator = username
-	input.ID = nextRoomID
-	nextRoomID++
-	chatrooms[input.ID] = input
+
+	var id int
+	err = db.QueryRow(
+		"INSERT INTO chatrooms (name, creator) VALUES ($1, $2) RETURNING id",
+		input.Name, username,
+	).Scan(&id)
+
+	if err != nil {
+		http.Error(w, "Error creating chatroom", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 
 	json.NewEncoder(w).Encode(ChatroomSummary{
-		ID:   input.ID,
+		ID:   id,
 		Name: input.Name,
 	})
 }
@@ -69,17 +83,28 @@ func CreateChatroomHandler(w http.ResponseWriter, r *http.Request) {
 func GetChatroomsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
+	rows, err := db.Query("SELECT id, name FROM chatrooms")
+
+	if err != nil {
+		http.Error(w, "Error fetching chatrooms", http.StatusInternalServerError)
+		return
+	}
+
+	defer rows.Close()
+
 	var summaries []ChatroomSummary
 
-	mu.Lock()
-	defer mu.Unlock()
+	for rows.Next() {
+		var summary ChatroomSummary
+		err := rows.Scan(&summary.ID, &summary.Name)
 
-	for _, cr := range chatrooms {
-		summaries = append(summaries, ChatroomSummary{
-			ID:   cr.ID,
-			Name: cr.Name,
-		})
+		if err != nil {
+			http.Error(w, "Error scanning chatroom", http.StatusInternalServerError)
+			return
+		}
+		summaries = append(summaries, summary)
 	}
+
 	json.NewEncoder(w).Encode(summaries)
 }
 
@@ -92,9 +117,6 @@ func DeleteChatroomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
 	chatroom, ok := getChatroom(w, id)
 
 	if !ok {
@@ -105,7 +127,16 @@ func DeleteChatroomHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Permission denied", http.StatusForbidden)
 		return
 	}
-	delete(chatrooms, id)
+
+	_, err = db.Exec(
+		"DELETE FROM chatrooms WHERE id = $1",
+		chatroom.ID,
+	)
+
+	if err != nil {
+		http.Error(w, "Error deleting chatroom", http.StatusInternalServerError)
+		return
+	}
 }
 
 func UpdateChatroomHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,13 +158,9 @@ func UpdateChatroomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
+	chatroom, ok := getChatroom(w, id)
 
-	chatroom, exists := chatrooms[id]
-
-	if !exists {
-		http.Error(w, "Room not found", http.StatusNotFound)
+	if !ok {
 		return
 	}
 
@@ -142,8 +169,18 @@ func UpdateChatroomHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chatroom.Name = input.Name
-	chatrooms[id] = chatroom
+	_, err = db.Exec(
+		"UPDATE chatrooms SET name = $1 WHERE id = $2",
+		input.Name, chatroom.ID,
+	)
 
-	json.NewEncoder(w).Encode(chatrooms[id])
+	if err != nil {
+		http.Error(w, "Error updating chatroom", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(ChatroomSummary{
+		ID:   id,
+		Name: input.Name,
+	})
 }

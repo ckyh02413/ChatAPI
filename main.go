@@ -3,19 +3,14 @@ package main
 import (
 	"net/http"
 	"os"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 )
 
-var users = make(map[string]User)
-var chatrooms = make(map[int]Chatroom)
-var nextRoomID = 1
-var nextMessageID = 1
 var jwtKey = []byte(os.Getenv("JWT_SECRET"))
-var mu sync.Mutex
 
 func main() {
+	InitDB()
 	r := chi.NewRouter()
 
 	r.Post("/register", RegisterHandler)
@@ -33,5 +28,6 @@ func main() {
 		r.Patch("/{id}/messages/{msgId}", UpdateMessageHandler)
 	})
 
+	r.Handle("/*", http.FileServer(http.Dir("./static")))
 	http.ListenAndServe(":8080", r)
 }

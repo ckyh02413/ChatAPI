@@ -33,24 +33,30 @@ func CreateMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	chatroom, ok := getChatroom(w, id)
+	_, ok := getChatroom(w, id)
 
 	if !ok {
 		return
 	}
 
-	input.ID = nextMessageID
-	nextMessageID++
-	input.Creator = username
+	var messageID int
 
-	chatroom.Messages = append(chatroom.Messages, input)
-	chatrooms[id] = chatroom
+	err = db.QueryRow(
+		"INSERT INTO messages (chatroom_id, creator, content) VALUES ($1, $2, $3) RETURNING id",
+		id, username, input.Content,
+	).Scan(&messageID)
+
+	if err != nil {
+		http.Error(w, "Error sending message", http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(input)
+	json.NewEncoder(w).Encode(Message{
+		ID:      messageID,
+		Creator: username,
+		Content: input.Content,
+	})
 
 }
 
@@ -63,16 +69,38 @@ func GetMessagesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	chatroom, ok := getChatroom(w, id)
+	_, ok := getChatroom(w, id)
 
 	if !ok {
 		return
 	}
 
-	json.NewEncoder(w).Encode(chatroom.Messages)
+	rows, err := db.Query(
+		"SELECT id, creator, content FROM messages WHERE chatroom_id = $1",
+		id,
+	)
+
+	if err != nil {
+		http.Error(w, "Error fetching messages", http.StatusInternalServerError)
+		return
+	}
+
+	defer rows.Close()
+
+	var messages []Message
+
+	for rows.Next() {
+		var message Message
+		err = rows.Scan(&message.ID, &message.Creator, &message.Content)
+
+		if err != nil {
+			http.Error(w, "Error scanning message", http.StatusInternalServerError)
+			return
+		}
+		messages = append(messages, message)
+	}
+
+	json.NewEncoder(w).Encode(messages)
 }
 
 func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
@@ -91,35 +119,38 @@ func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
 	chatroom, ok := getChatroom(w, id)
 
 	if !ok {
 		return
 	}
 
-	found := false
+	var message Message
 
-	for i, msg := range chatroom.Messages {
-		if msg.ID == messageID {
-			if msg.Creator != username && chatroom.Creator != username {
-				http.Error(w, "Permission denied", http.StatusForbidden)
-				return
-			}
-			chatroom.Messages = append(chatroom.Messages[:i], chatroom.Messages[i+1:]...)
-			found = true
-			break
-		}
-	}
+	err = db.QueryRow(
+		"SELECT id, creator, content FROM messages WHERE id = $1",
+		messageID,
+	).Scan(&message.ID, &message.Creator, &message.Content)
 
-	if !found {
-		http.Error(w, "Message not found", http.StatusNotFound)
+	if err != nil {
+		http.Error(w, "Error fetching message", http.StatusInternalServerError)
 		return
 	}
 
-	chatrooms[id] = chatroom
+	if message.Creator != username && chatroom.Creator != username {
+		http.Error(w, "Permission denied", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = db.Exec(
+		"DELETE FROM messages WHERE id = $1",
+		messageID,
+	)
+
+	if err != nil {
+		http.Error(w, "Error deleting message", http.StatusInternalServerError)
+		return
+	}
 
 }
 
@@ -148,36 +179,43 @@ func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mu.Lock()
-	defer mu.Unlock()
-
-	chatroom, ok := getChatroom(w, id)
+	_, ok := getChatroom(w, id)
 
 	if !ok {
 		return
 	}
 
-	found := false
+	var message Message
 
-	var updatedID int
-	for i, msg := range chatroom.Messages {
-		if msg.ID == messageID {
-			if msg.Creator != username {
-				http.Error(w, "Permission denied", http.StatusForbidden)
-				return
-			}
-			chatroom.Messages[i].Content = input.Content
-			updatedID = i
-			found = true
-			break
-		}
-	}
+	err = db.QueryRow(
+		"SELECT id, creator, content FROM messages WHERE id = $1",
+		messageID,
+	).Scan(&message.ID, &message.Creator, &message.Content)
 
-	if !found {
-		http.Error(w, "Message not found", http.StatusNotFound)
+	if err != nil {
+		http.Error(w, "Error fetching message", http.StatusInternalServerError)
 		return
 	}
 
-	chatrooms[id] = chatroom
-	json.NewEncoder(w).Encode(chatrooms[id].Messages[updatedID])
+	if message.Creator != username {
+		http.Error(w, "Permission denied", http.StatusUnauthorized)
+		return
+	}
+
+	_, err = db.Exec(
+		"UPDATE messages SET content = $1 WHERE id = $2",
+		input.Content, messageID,
+	)
+
+	if err != nil {
+		http.Error(w, "Error updating message", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(
+		Message{
+			ID:      message.ID,
+			Creator: message.Creator,
+			Content: input.Content,
+		})
 }
