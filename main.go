@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 
@@ -12,6 +13,15 @@ var jwtKey = []byte(os.Getenv("JWT_SECRET"))
 func main() {
 	InitDB()
 	r := chi.NewRouter()
+
+	r.With(JWTMiddleware).Get("/me", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		username := r.Context().Value("username").(string)
+
+		json.NewEncoder(w).Encode(map[string]string{
+			"username": username,
+		})
+	})
 
 	r.Post("/register", RegisterHandler)
 	r.Post("/login", LoginHandler)

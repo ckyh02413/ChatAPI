@@ -1,295 +1,146 @@
 <!doctype html>
-<html>
+<html lang="en">
     <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>ChatAPI</title>
+        <link
+            href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="style.css" />
     </head>
     <body>
-        <h1>Login</h1>
-        <input id="log-username" placeholder="Username" />
-        <input id="log-password" placeholder="Password" type="password" />
-        <button onclick="login()">Login</button>
-        <p id="log-result"></p>
+        <!-- auth screen -->
+        <div id="auth-screen">
+            <div class="auth-box">
+                <h1>ChatAPI</h1>
 
-        <h1>Register</h1>
-        <input id="reg-username" placeholder="Username" />
-        <input id="reg-mail" placeholder="Email" />
-        <input id="reg-password" placeholder="Password" type="password" />
-        <button onclick="register()">Register</button>
-        <p id="reg-result"></p>
+                <!-- login form -->
+                <div id="login-form">
+                    <p class="subtitle">Sign in to continue</p>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input
+                            type="text"
+                            id="login-username"
+                            placeholder="Enter username"
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input
+                            type="password"
+                            id="login-password"
+                            placeholder="Enter password"
+                        />
+                    </div>
+                    <button class="auth-btn" onclick="login()">Sign in</button>
+                    <p class="auth-switch">
+                        Don't have an account?
+                        <span onclick="showRegister()">Register</span>
+                    </p>
+                    <p class="auth-error" id="login-error"></p>
+                </div>
 
-        <h1>Chatrooms</h1>
-        <button onclick="loadRooms()">Load Rooms</button>
-        <input id="room-name" placeholder="Room name" />
-        <button onclick="createRoom()">Create Room</button>
-        <div id="rooms"></div>
+                <!-- register form -->
+                <div id="register-form" style="display: none">
+                    <p class="subtitle">Create your account</p>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input
+                            type="text"
+                            id="reg-username"
+                            placeholder="Choose a username"
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input
+                            type="email"
+                            id="reg-mail"
+                            placeholder="Enter your email"
+                        />
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input
+                            type="password"
+                            id="reg-password"
+                            placeholder="Choose a password"
+                        />
+                    </div>
+                    <button class="auth-btn" onclick="register()">
+                        Create account
+                    </button>
+                    <p class="auth-switch">
+                        Already have an account?
+                        <span onclick="showLogin()">Sign in</span>
+                    </p>
+                    <p class="auth-error" id="reg-error"></p>
+                </div>
+            </div>
+        </div>
 
-        <h1>Messages</h1>
-        <div id="current-room"></div>
-        <div id="messages"></div>
-        <input id="msg-content" placeholder="Type a message" />
-        <button onclick="sendMessage()">Send</button>
+        <!-- chat screen -->
+        <div id="chat-screen">
+            <div class="chat-layout">
+                <!-- sidebar -->
+                <div class="sidebar">
+                    <div class="sidebar-header">
+                        <h2>ChatAPI</h2>
+                        <div class="room-create">
+                            <input
+                                type="text"
+                                id="room-name-input"
+                                placeholder="New room..."
+                            />
+                            <button onclick="createRoom()">+</button>
+                        </div>
+                    </div>
+                    <div class="room-list" id="room-list"></div>
+                    <div class="sidebar-footer">
+                        <div class="user-info">
+                            <div class="user-avatar" id="user-avatar"></div>
+                            <span class="user-name" id="user-name"></span>
+                        </div>
+                        <button class="logout-btn" onclick="logout()">
+                            logout
+                        </button>
+                    </div>
+                </div>
 
-        <script>
-            async function login() {
-                const username = document.getElementById("log-username").value;
-                const password = document.getElementById("log-password").value;
+                <!-- main chat -->
+                <div class="chat-main">
+                    <div class="chat-empty" id="chat-empty">
+                        Select a room to start chatting
+                    </div>
 
-                const response = await fetch("/login", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: username,
-                        password: password,
-                    }),
-                });
+                    <div id="chat-active" style="display: none">
+                        <div class="chat-header">
+                            <h3 id="chat-room-name"># general</h3>
+                            <span
+                                class="chat-header .msg-count"
+                                id="msg-count"
+                            ></span>
+                        </div>
+                        <div class="chat-messages" id="chat-messages"></div>
+                        <div class="chat-input">
+                            <input
+                                type="text"
+                                id="msg-input"
+                                placeholder="Type a message..."
+                                onkeydown="
+                                    if (event.key === 'Enter') sendMessage();
+                                "
+                            />
+                            <button onclick="sendMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                const result = document.getElementById("log-result");
-
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("token", data.token);
-                    result.textContent = "Login successful!";
-                } else {
-                    const error = await response.text();
-                    result.textContent = error;
-                }
-            }
-
-            async function register() {
-                const username = document.getElementById("reg-username").value;
-                const mail = document.getElementById("reg-mail").value;
-                const password = document.getElementById("reg-password").value;
-
-                const response = await fetch("/register", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        username: username,
-                        mail: mail,
-                        password: password,
-                    }),
-                });
-
-                const result = document.getElementById("reg-result");
-
-                if (response.ok) {
-                    const data = await response.json();
-                    localStorage.setItem("token", data.token);
-                    result.textContent = "Registration successful!";
-                } else {
-                    const error = await response.text();
-                    result.textContent = error;
-                }
-            }
-
-            async function loadRooms() {
-                const token = localStorage.getItem("token");
-                const response = await fetch("/rooms/", {
-                    headers: { Authorization: "Bearer " + token },
-                });
-
-                const rooms = document.getElementById("rooms");
-
-                if (response.ok) {
-                    const data = await response.json();
-                    rooms.innerHTML = "";
-
-                    data.forEach((room) => {
-                        const div = document.createElement("div");
-
-                        const name = document.createElement("span");
-                        name.textContent =
-                            room.name + " (ID: " + room.id + ") ";
-                        name.style.cursor = "pointer";
-                        name.onclick = () => openRoom(room.id, room.name);
-
-                        const editBtn = document.createElement("button");
-                        editBtn.textContent = "Edit";
-                        editBtn.onclick = () => editRoom(room.id);
-
-                        const deleteBtn = document.createElement("button");
-                        deleteBtn.textContent = "Delete";
-                        deleteBtn.onclick = () => deleteRoom(room.id);
-
-                        div.appendChild(name);
-                        div.appendChild(editBtn);
-                        div.appendChild(deleteBtn);
-                        rooms.appendChild(div);
-                    });
-                } else {
-                    rooms.textContent = "Failed to load rooms";
-                }
-            }
-
-            async function deleteRoom(id) {
-                const token = localStorage.getItem("token");
-                const response = await fetch("/rooms/" + id, {
-                    method: "DELETE",
-                    headers: { Authorization: "Bearer " + token },
-                });
-
-                if (response.ok) {
-                    loadRooms();
-                } else {
-                    const error = await response.text();
-                    alert(error);
-                }
-            }
-
-            async function editRoom(id) {
-                const newName = prompt("Enter new room name:");
-                if (!newName) return;
-
-                const token = localStorage.getItem("token");
-
-                const response = await fetch("/rooms/" + id, {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: "Bearer " + token,
-                    },
-                    body: JSON.stringify({ name: newName }),
-                });
-
-                if (response.ok) {
-                    loadRooms();
-                } else {
-                    const error = await response.text();
-                    alert(error);
-                }
-            }
-
-            async function createRoom() {
-                const token = localStorage.getItem("token");
-                const name = document.getElementById("room-name").value;
-                const response = await fetch("/rooms/", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: "Bearer " + token,
-                    },
-                    body: JSON.stringify({ name: name }),
-                });
-
-                if (response.ok) {
-                    loadRooms();
-                }
-            }
-
-            let currentRoomId = null;
-
-            function openRoom(id, name) {
-                currentRoomId = id;
-                document.getElementById("current-room").textContent =
-                    "Room: " + name;
-                loadMessages();
-            }
-
-            async function loadMessages() {
-                const token = localStorage.getItem("token");
-                const response = await fetch(
-                    "/rooms/" + currentRoomId + "/messages",
-                    {
-                        headers: { Authorization: "Bearer " + token },
-                    },
-                );
-
-                const messages = document.getElementById("messages");
-
-                if (response.ok) {
-                    const data = await response.json();
-                    messages.innerHTML = "";
-
-                    if (data) {
-                        data.forEach((msg) => {
-                            const div = document.createElement("div");
-
-                            const text = document.createElement("span");
-                            text.textContent =
-                                msg.creator + ": " + msg.content + " ";
-
-                            const editBtn = document.createElement("button");
-                            editBtn.textContent = "Edit";
-                            editBtn.onclick = () => editMessage(msg.id);
-
-                            const deleteBtn = document.createElement("button");
-                            deleteBtn.textContent = "Delete";
-                            deleteBtn.onclick = () => deleteMessage(msg.id);
-
-                            div.appendChild(text);
-                            div.appendChild(editBtn);
-                            div.appendChild(deleteBtn);
-                            messages.appendChild(div);
-                        });
-                    }
-                }
-            }
-
-            async function deleteMessage(id) {
-                const token = localStorage.getItem("token");
-                const response = await fetch(
-                    "/rooms/" + currentRoomId + "/messages/" + id,
-                    {
-                        method: "DELETE",
-                        headers: { Authorization: "Bearer " + token },
-                    },
-                );
-
-                if (response.ok) {
-                    loadMessages();
-                } else {
-                    const error = response.text();
-                    alert(error);
-                }
-            }
-
-            async function editMessage(id) {
-                const newContent = prompt("Enter new message: ");
-                if (!newContent) return;
-
-                const token = localStorage.getItem("token");
-
-                const response = await fetch(
-                    "/rooms/" + currentRoomId + "/messages/" + id,
-                    {
-                        method: "PATCH",
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: "Bearer " + token,
-                        },
-                        body: JSON.stringify({ content: newContent }),
-                    },
-                );
-
-                if (response.ok) {
-                    loadMessages();
-                } else {
-                    const error = response.text();
-                    alert(error);
-                }
-            }
-
-            async function sendMessage() {
-                const token = localStorage.getItem("token");
-                const content = document.getElementById("msg-content").value;
-
-                const response = await fetch(
-                    "/rooms/" + currentRoomId + "/messages",
-                    {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                            Authorization: "Bearer " + token,
-                        },
-                        body: JSON.stringify({ content: content }),
-                    },
-                );
-
-                if (response.ok) {
-                    document.getElementById("msg-content").value = "";
-                    loadMessages();
-                }
-            }
-        </script>
+        <script src="scripts.js"></script>
     </body>
 </html>
