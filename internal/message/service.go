@@ -20,15 +20,16 @@ func (s *Service) Create(chatroomID int, creator, content string) (Message, erro
 		return Message{}, apperrors.ErrChatroomNotFound
 	}
 
-	messageID, err := s.repo.Create(chatroom.ID, creator, content)
+	messageID, createdAt, err := s.repo.Create(chatroom.ID, creator, content)
 	if err != nil {
 		return Message{}, err
 	}
 
 	return Message{
-		ID:      messageID,
-		Creator: creator,
-		Content: content,
+		ID:        messageID,
+		Creator:   creator,
+		Content:   content,
+		CreatedAt: createdAt,
 	}, nil
 }
 
@@ -56,9 +57,10 @@ func (s *Service) Update(messageID int, username, newContent string) (Message, e
 	}
 
 	return Message{
-		ID:      messageID,
-		Creator: username,
-		Content: newContent,
+		ID:        messageID,
+		Creator:   username,
+		Content:   newContent,
+		CreatedAt: message.CreatedAt,
 	}, nil
 }
 

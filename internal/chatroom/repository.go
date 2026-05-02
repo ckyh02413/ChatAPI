@@ -1,6 +1,9 @@
 package chatroom
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 type Repository struct {
 	db *sql.DB
@@ -10,14 +13,15 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Create(name, creator string) (int, error) {
+func (r *Repository) Create(name, creator string) (int, time.Time, error) {
 	var chatroomID int
+	var createdAt time.Time
 	err := r.db.QueryRow(
-		"INSERT INTO chatrooms (name, creator) VALUES ($1, $2) RETURNING id",
+		"INSERT INTO chatrooms (name, creator) VALUES ($1, $2) RETURNING id, created_at",
 		name, creator,
-	).Scan(&chatroomID)
+	).Scan(&chatroomID, &createdAt)
 
-	return chatroomID, err
+	return chatroomID, createdAt, err
 }
 
 func (r *Repository) Exists(name string) (bool, error) {
@@ -33,15 +37,15 @@ func (r *Repository) Exists(name string) (bool, error) {
 func (r *Repository) FindByID(chatroomID int) (Chatroom, error) {
 	var chatroom Chatroom
 	err := r.db.QueryRow(
-		"SELECT id, name, creator FROM chatrooms WHERE id = $1",
+		"SELECT id, name, creator, created_at FROM chatrooms WHERE id = $1",
 		chatroomID,
-	).Scan(&chatroom.ID, &chatroom.Name, &chatroom.Creator)
+	).Scan(&chatroom.ID, &chatroom.Name, &chatroom.Creator, &chatroom.CreatedAt)
 
 	return chatroom, err
 }
 
 func (r *Repository) List() ([]Summary, error) {
-	rows, err := r.db.Query("SELECT id, name FROM chatrooms")
+	rows, err := r.db.Query("SELECT id, name, created_at FROM chatrooms ORDER BY created_at ASC")
 
 	if err != nil {
 		return nil, err
@@ -52,7 +56,7 @@ func (r *Repository) List() ([]Summary, error) {
 	var summaries = make([]Summary, 0)
 	for rows.Next() {
 		var summary Summary
-		if err := rows.Scan(&summary.ID, &summary.Name); err != nil {
+		if err := rows.Scan(&summary.ID, &summary.Name, &summary.CreatedAt); err != nil {
 			return nil, err
 		}
 		summaries = append(summaries, summary)

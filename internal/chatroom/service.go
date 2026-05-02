@@ -20,14 +20,15 @@ func (s *Service) Create(name, creator string) (Summary, error) {
 		return Summary{}, apperrors.ErrAlreadyExists
 	}
 
-	chatroomID, err := s.repo.Create(name, creator)
+	chatroomID, createdAt, err := s.repo.Create(name, creator)
 	if err != nil {
 		return Summary{}, err
 	}
 
 	return Summary{
-		ID:   chatroomID,
-		Name: name,
+		ID:        chatroomID,
+		Name:      name,
+		CreatedAt: createdAt,
 	}, nil
 }
 
@@ -50,8 +51,9 @@ func (s *Service) Update(chatroomID int, username, newName string) (Summary, err
 	}
 
 	return Summary{
-		ID:   chatroomID,
-		Name: newName,
+		ID:        chatroomID,
+		Name:      newName,
+		CreatedAt: chatroom.CreatedAt,
 	}, nil
 }
 

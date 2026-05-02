@@ -1,6 +1,9 @@
 package message
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 type Repository struct {
 	db *sql.DB
@@ -10,29 +13,30 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
-func (r *Repository) Create(chatroomID int, creator, content string) (int, error) {
+func (r *Repository) Create(chatroomID int, creator, content string) (int, time.Time, error) {
 	var messageID int
+	var createdAt time.Time
 	err := r.db.QueryRow(
-		"INSERT INTO messages (chatroom_id, creator, content) VALUES ($1, $2, $3) RETURNING id",
+		"INSERT INTO messages (chatroom_id, creator, content) VALUES ($1, $2, $3) RETURNING id, created_at",
 		chatroomID, creator, content,
-	).Scan(&messageID)
+	).Scan(&messageID, &createdAt)
 
-	return messageID, err
+	return messageID, createdAt, err
 }
 
 func (r *Repository) FindByID(messageID int) (Message, error) {
 	var message Message
 	err := r.db.QueryRow(
-		"SELECT id, creator, content FROM messages WHERE id = $1",
+		"SELECT id, creator, content, created_at FROM messages WHERE id = $1",
 		messageID,
-	).Scan(&message.ID, &message.Creator, &message.Content)
+	).Scan(&message.ID, &message.Creator, &message.Content, &message.CreatedAt)
 
 	return message, err
 }
 
 func (r *Repository) ListByChatroom(chatroomID int) ([]Message, error) {
 	rows, err := r.db.Query(
-		"SELECT id, creator, content FROM messages WHERE chatroom_id = $1",
+		"SELECT id, creator, content, created_at FROM messages WHERE chatroom_id = $1 ORDER BY created_at ASC",
 		chatroomID,
 	)
 
@@ -45,7 +49,7 @@ func (r *Repository) ListByChatroom(chatroomID int) ([]Message, error) {
 	messages := make([]Message, 0)
 	for rows.Next() {
 		var message Message
-		if err := rows.Scan(&message.ID, &message.Creator, &message.Content); err != nil {
+		if err := rows.Scan(&message.ID, &message.Creator, &message.Content, &message.CreatedAt); err != nil {
 			return nil, err
 		}
 		messages = append(messages, message)
