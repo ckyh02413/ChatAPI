@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -7,12 +7,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
-var db *sql.DB
-
-func InitDB() {
-	var err error
-
-	db, err = sql.Open("postgres", "host=localhost dbname=chatapi sslmode=disable")
+func InitDB(connStr string) *sql.DB {
+	db, err := sql.Open("postgres", connStr)
 
 	if err != nil {
 		log.Fatal(err)
@@ -23,4 +19,6 @@ func InitDB() {
 	}
 
 	log.Println("Connected to database")
+
+	return db
 }
