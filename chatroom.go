@@ -37,12 +37,16 @@ func getChatroom(w http.ResponseWriter, id int) (Chatroom, bool) {
 }
 
 func CreateChatroomHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	var input Chatroom
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	if input.Name == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)
@@ -92,7 +96,7 @@ func GetChatroomsHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer rows.Close()
 
-	var summaries []ChatroomSummary
+	summaries := make([]ChatroomSummary, 0)
 
 	for rows.Next() {
 		var summary ChatroomSummary
@@ -105,11 +109,16 @@ func GetChatroomsHandler(w http.ResponseWriter, r *http.Request) {
 		summaries = append(summaries, summary)
 	}
 
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Error reading rows", http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(summaries)
 }
 
 func DeleteChatroomHandler(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -140,9 +149,10 @@ func DeleteChatroomHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateChatroomHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -151,7 +161,10 @@ func UpdateChatroomHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input Chatroom
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	if input.Name == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)

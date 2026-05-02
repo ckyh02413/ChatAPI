@@ -15,9 +15,10 @@ type Message struct {
 }
 
 func CreateMessageHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -26,7 +27,10 @@ func CreateMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input Message
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	if input.Content == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)
@@ -87,7 +91,7 @@ func GetMessagesHandler(w http.ResponseWriter, r *http.Request) {
 
 	defer rows.Close()
 
-	var messages []Message
+	messages := make([]Message, 0)
 
 	for rows.Next() {
 		var message Message
@@ -99,12 +103,16 @@ func GetMessagesHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		messages = append(messages, message)
 	}
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Error reading rows", http.StatusInternalServerError)
+		return
+	}
 
 	json.NewEncoder(w).Encode(messages)
 }
 
 func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -138,7 +146,7 @@ func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if message.Creator != username && chatroom.Creator != username {
-		http.Error(w, "Permission denied", http.StatusUnauthorized)
+		http.Error(w, "Permission denied", http.StatusForbidden)
 		return
 	}
 
@@ -155,9 +163,10 @@ func DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
@@ -172,7 +181,10 @@ func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input Message
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	if input.Content == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)
@@ -198,7 +210,7 @@ func UpdateMessageHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if message.Creator != username {
-		http.Error(w, "Permission denied", http.StatusUnauthorized)
+		http.Error(w, "Permission denied", http.StatusForbidden)
 		return
 	}
 

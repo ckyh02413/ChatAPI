@@ -11,6 +11,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type contextKey string
+
+const usernameKey contextKey = "username"
+
 type User struct {
 	Username string `json:"username"`
 	Mail     string `json:"mail"`
@@ -46,10 +50,14 @@ func GenerateJWT(username string) (string, error) {
 }
 
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
 	var input User
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	if input.Username == "" || input.Mail == "" || input.Password == "" {
 		http.Error(w, "Missing fields", http.StatusBadRequest)
@@ -68,7 +76,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, "User already exists", http.StatusConflict)
+		http.Error(w, "Registration failed", http.StatusConflict)
 		return
 	}
 
@@ -84,10 +92,14 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func LoginHandler(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1_048_576)
 	w.Header().Set("Content-Type", "application/json")
 
 	var input User
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 
 	var user User
 
@@ -151,7 +163,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "username", claims.Username)
+		ctx := context.WithValue(r.Context(), usernameKey, claims.Username)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
