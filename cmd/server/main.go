@@ -42,6 +42,10 @@ func main() {
 
 	rl := ratelimit.New(rate.Limit(5), 10)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go rl.Cleanup(ctx, 5*time.Minute, 15*time.Minute)
+
 	handler := server.New(authHandler, chatroomHandler, messageHandler, rl)
 
 	srv := &http.Server{
@@ -64,10 +68,10 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 

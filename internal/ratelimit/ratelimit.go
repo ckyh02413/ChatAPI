@@ -1,8 +1,10 @@
 package ratelimit
 
 import (
+	"context"
 	"net"
 	"net/http"
+	"time"
 
 	"sync"
 
@@ -10,15 +12,20 @@ import (
 )
 
 type Limiter struct {
-	limiters map[string]*rate.Limiter
+	limiters map[string]*entry
 	mu       sync.Mutex
 	rate     rate.Limit
 	burst    int
 }
 
+type entry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 func New(r rate.Limit, b int) *Limiter {
 	return &Limiter{
-		limiters: make(map[string]*rate.Limiter),
+		limiters: make(map[string]*entry),
 		rate:     r,
 		burst:    b,
 	}
@@ -28,13 +35,14 @@ func (l *Limiter) getLimiter(ip string) *rate.Limiter {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	limiter, ok := l.limiters[ip]
+	e, ok := l.limiters[ip]
 	if !ok {
-		limiter = rate.NewLimiter(l.rate, l.burst)
-		l.limiters[ip] = limiter
+		e = &entry{limiter: rate.NewLimiter(l.rate, l.burst)}
+		l.limiters[ip] = e
 	}
+	e.lastSeen = time.Now()
 
-	return limiter
+	return e.limiter
 }
 
 func (l *Limiter) Middleware(next http.Handler) http.Handler {
@@ -53,4 +61,30 @@ func (l *Limiter) Middleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (l *Limiter) Cleanup(ctx context.Context, interval, ttl time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.evictOlderThan(ttl)
+		}
+	}
+}
+
+func (l *Limiter) evictOlderThan(ttl time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	cutoff := time.Now().Add(-ttl)
+	for ip, e := range l.limiters {
+		if e.lastSeen.Before(cutoff) {
+			delete(l.limiters, ip)
+		}
+	}
 }
