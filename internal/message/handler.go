@@ -3,6 +3,7 @@ package message
 import (
 	"chatapi/internal/auth"
 	apperrors "chatapi/internal/errors"
+	"chatapi/internal/validation"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -36,8 +37,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Content == "" {
-		http.Error(w, "Missing fields", http.StatusBadRequest)
+	if err := validation.Validate(input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -111,8 +112,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Content == "" {
-		http.Error(w, "Missing fields", http.StatusBadRequest)
+	if err := validation.Validate(input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

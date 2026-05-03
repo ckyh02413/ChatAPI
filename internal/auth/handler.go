@@ -2,6 +2,7 @@ package auth
 
 import (
 	apperrors "chatapi/internal/errors"
+	"chatapi/internal/validation"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -49,8 +50,8 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if input.Username == "" || input.Mail == "" || input.Password == "" {
-		http.Error(w, "Missing fields", http.StatusBadRequest)
+	if err := validation.Validate(input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -71,6 +72,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var input LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if err := validation.Validate(input); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
