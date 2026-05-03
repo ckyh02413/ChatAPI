@@ -4,6 +4,7 @@ import (
 	"chatapi/internal/auth"
 	"chatapi/internal/chatroom"
 	"chatapi/internal/message"
+	"chatapi/internal/ratelimit"
 	"encoding/json"
 	"net/http"
 
@@ -15,9 +16,11 @@ func New(
 	authHandler *auth.Handler,
 	chatroomHandler *chatroom.Handler,
 	messageHandler *message.Handler,
+	rateLimiter *ratelimit.Limiter,
 ) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(rateLimiter.Middleware)
 
 	r.Post("/register", authHandler.Register)
 	r.Post("/login", authHandler.Login)

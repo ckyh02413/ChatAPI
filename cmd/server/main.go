@@ -6,6 +6,7 @@ import (
 	"chatapi/internal/config"
 	"chatapi/internal/database"
 	"chatapi/internal/message"
+	"chatapi/internal/ratelimit"
 	"chatapi/internal/server"
 	"context"
 	"log"
@@ -14,6 +15,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -37,7 +40,9 @@ func main() {
 	messageService := message.NewService(messageRepo, chatroomRepo)
 	messageHandler := message.NewHandler(messageService)
 
-	handler := server.New(authHandler, chatroomHandler, messageHandler)
+	rl := ratelimit.New(rate.Limit(5), 10)
+
+	handler := server.New(authHandler, chatroomHandler, messageHandler, rl)
 
 	srv := &http.Server{
 		Addr:         ":" + conf.Port,
